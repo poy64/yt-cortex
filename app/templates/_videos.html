@@ -1,0 +1,17 @@
+{% if not videos %}
+<p class="empty">Aucune vidéo pour l'instant. Colle des liens YouTube ci-dessus, ou abonne-toi à une chaîne.</p>
+{% endif %}
+{% for v in videos %}
+<div class="vcard st-{{ v.status }}">
+  <label class="chk"><input type="checkbox" name="video_ids" value="{{ v.id }}" form="skillform" {% if v.status != 'done' %}disabled title="Disponible quand la fiche est terminée"{% endif %}></label>
+  <a class="thumb" href="/video/{{ v.id }}"><img loading="lazy" src="{{ v.thumbnail }}" alt=""></a>
+  <div class="vinfo">
+    <a class="vtitle" href="/video/{{ v.id }}">{{ v.title or v.url }}</a>
+    <div class="meta">{{ v.channel }}{% if v.published %} · {{ v.published }}{% endif %}{% if v.duration %} · {{ v.duration|dur }}{% endif %}{% if v.source %} · {{ v.source }}{% endif %}</div>
+    {% if v.status in ACTIVE and v.step %}<div class="step">{{ v.step }}</div>{% endif %}
+    {% if v.status == 'transcribed' and v.step %}<div class="step warn">{{ v.step }}</div>{% endif %}
+    {% if v.status == 'error' %}<div class="step err">{{ v.error[:240] }}</div>{% endif %}
+  </div>
+  <span class="badge b-{{ v.status }}">{{ STATUS_FR.get(v.status, v.status) }}</span>
+</div>
+{% endfor %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+{% if msg %}<div class="panel step ok">{{ msg }}</div>{% endif %}
+<form method="post" action="/settings" class="panel">
+  <h1>Réglages</h1>
+
+  <h3>IA (résumés et skills)</h3>
+  <label>Clé API Anthropic {% if masked.anthropic_api_key %}<small>(enregistrée : {{ masked.anthropic_api_key }} — laisse vide pour la conserver)</small>{% endif %}
+    <input type="password" name="anthropic_api_key" placeholder="sk-ant-…" autocomplete="off"></label>
+  <label>Modèle <input name="llm_model" value="{{ vals.llm_model }}" placeholder="{{ default_model }}"></label>
+  <label>Langue de sortie <input name="output_language" value="{{ vals.output_language }}" placeholder="français"></label>
+  <label class="chk"><input type="checkbox" name="resolve_tool_links" {% if vals.resolve_tool_links != '0' %}checked{% endif %}> Chercher sur le web les liens officiels des outils cités (recherche web Anthropic, coût supplémentaire léger)</label>
+
+  <h3>Transcription</h3>
+  <label>Langues de sous-titres préférées (ordre) <input name="sub_langs" value="{{ vals.sub_langs }}" placeholder="fr,en"></label>
+  <label>Modèle Whisper (si pas de sous-titres) <input name="whisper_model" value="{{ vals.whisper_model }}" placeholder="small  (tiny, base, small, medium, large-v3)"></label>
+
+  <h3>Chaînes</h3>
+  <label>Période listée (jours) <input name="channel_days" value="{{ vals.channel_days }}" placeholder="60"></label>
+  <label class="chk"><input type="checkbox" name="auto_sync" {% if vals.auto_sync != '0' %}checked{% endif %}> Actualiser automatiquement la liste des chaînes toutes les 6 h</label>
+
+  <h3>Accès YouTube (si le serveur est bloqué)</h3>
+  <label>Proxy (optionnel) {% if masked.proxy_url %}<small>({{ masked.proxy_url }})</small>{% endif %}<input name="proxy_url" placeholder="http://user:pass@host:port"></label>
+  <label>URL du fournisseur de PO token (bgutil) <input name="bgutil_url" value="{{ vals.bgutil_url }}" placeholder="http://bgutil:4416"></label>
+
+  <h3>Dépôt dans l'AIOS (Dropbox)</h3>
+  <label>App key Dropbox <input name="dropbox_app_key" value="{{ vals.dropbox_app_key }}"></label>
+  <label>App secret Dropbox {% if masked.dropbox_app_secret %}<small>(enregistré)</small>{% endif %}<input type="password" name="dropbox_app_secret" autocomplete="off"></label>
+  <label>Dossier des skills dans Dropbox <input name="dropbox_skills_path" value="{{ vals.dropbox_skills_path }}" placeholder="/-=AIOS=-/.claude/skills"></label>
+
+  <button class="btn primary">Enregistrer</button>
+</form>
+
+<section class="panel">
+  <h3>Connexion Dropbox {% if dbx %}<span class="badge b-done">connecté</span>{% endif %}</h3>
+  <ol class="hint">
+    <li>Sur dropbox.com/developers/apps : crée une app « Scoped access », accès « Full Dropbox », permissions <code>files.content.write</code>. Renseigne App key et App secret ci-dessus puis enregistre.</li>
+    <li>{% if dbx_url %}<a href="{{ dbx_url }}" target="_blank" rel="noopener noreferrer">Autoriser l'application ↗</a> et copie le code affiché.{% else %}Enregistre d'abord l'App key, un lien d'autorisation apparaîtra ici.{% endif %}</li>
+    <li>Colle le code ci-dessous.</li>
+  </ol>
+  <form method="post" action="/settings/dropbox" class="row"><input class="grow" name="code" placeholder="Code d'autorisation"><button class="btn">Connecter</button></form>
+</section>
+
+<section class="panel">
+  <h3>Cookies YouTube {% if cookies %}<span class="badge b-done">présents</span>{% endif %}</h3>
+  <p class="hint">À utiliser seulement si YouTube bloque le serveur (« Sign in to confirm you're not a bot »). Exporte un cookies.txt (format Netscape) depuis une fenêtre privée, de préférence avec un compte secondaire (risque de blocage du compte). Laisse vide puis envoie pour supprimer.</p>
+  <form method="post" action="/settings/cookies"><textarea name="cookies" rows="5" placeholder="# Netscape HTTP Cookie File …"></textarea><button class="btn">Enregistrer les cookies</button></form>
+</section>
+{% endblock %}

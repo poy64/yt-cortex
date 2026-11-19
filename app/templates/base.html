@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}YT Cortex{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">▶ YT Cortex</a>
+  <nav>
+    <a href="/" {% if request.url.path == '/' %}class="on"{% endif %}>Vidéos</a>
+    <a href="/channels" {% if request.url.path.startswith('/channels') %}class="on"{% endif %}>Chaînes</a>
+    <a href="/skills" {% if request.url.path.startswith('/skills') %}class="on"{% endif %}>Skills</a>
+    <a href="/settings" {% if request.url.path.startswith('/settings') %}class="on"{% endif %}>Réglages</a>
+    <a href="/diag" {% if request.url.path.startswith('/diag') %}class="on"{% endif %}>Diagnostic</a>
+  </nav>
+</header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

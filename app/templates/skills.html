@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Skills générés</h1>
+  <p class="hint">Crée un skill depuis l'onglet <a href="/">Vidéos</a> : coche une ou plusieurs vidéos « Terminé » puis « Transformer en skill ».
+  {% if not dbx %}Dépôt direct dans l'AIOS : connecte Dropbox dans <a href="/settings">Réglages</a> (sinon, télécharge le .skill).{% endif %}</p>
+  {% for s in items %}
+  <div class="vcard">
+    <div class="vinfo">
+      <a class="vtitle" href="/skills/{{ s.id }}">{{ s.name or '(en génération…)' }}</a>
+      <div class="meta">{{ vcount(s) }} vidéo(s) · {{ s.created_at|ts }}{% if s.pushed_at %} · déposé dans l'AIOS le {{ s.pushed_at|ts }}{% endif %}</div>
+      <div class="meta">{{ s.description[:200] }}</div>
+      {% if s.status == 'error' %}<div class="step err">{{ s.error }}</div>{% endif %}
+    </div>
+    <span class="badge b-{{ s.status if s.status != 'generating' else 'summarizing' }}">{{ {'queued':'En file','generating':'Génération…','done':'Prêt','error':'Erreur'}.get(s.status, s.status) }}</span>
+  </div>
+  {% else %}<p class="empty">Aucun skill pour l'instant.</p>{% endfor %}
+</section>
+{% if items|selectattr('status','in',['queued','generating'])|list %}<script>setTimeout(() => location.reload(), 5000);</script>{% endif %}
+{% endblock %}

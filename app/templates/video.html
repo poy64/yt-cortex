@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ v.title or 'Vidéo' }} — YT Cortex{% endblock %}
+{% block content %}
+<section class="panel vhead">
+  <img class="bigthumb" src="{{ v.thumbnail }}" alt="">
+  <div>
+    <h1>{{ v.title or v.url }}</h1>
+    <div class="meta">{{ v.channel }}{% if v.published %} · {{ v.published }}{% endif %}{% if v.duration %} · {{ v.duration|dur }}{% endif %}
+      · <a href="{{ v.url }}" target="_blank" rel="noopener noreferrer">Voir sur YouTube ↗</a>
+      {% if v.source %} · transcription : {{ v.source }}{% if v.lang %} ({{ v.lang }}){% endif %}{% endif %}</div>
+    <div class="row">
+      <span class="badge b-{{ v.status }}" id="vbadge">{{ STATUS_FR.get(v.status, v.status) }}</span>
+      <span class="step" id="vstep">{{ v.step }}</span>
+    </div>
+    {% if v.status == 'error' %}<div class="step err">{{ v.error }}</div>{% endif %}
+    <div class="row wrap">
+      {% if v.status == 'done' %}
+      <form method="post" action="/skills/create"><input type="hidden" name="video_ids" value="{{ v.id }}"><button class="btn primary">Transformer en skill</button></form>
+      {% endif %}
+      {% if v.transcript and llm_ok %}<form method="post" action="/video/{{ v.id }}/summarize"><button class="btn">{% if v.summary_md %}Régénérer{% else %}Générer{% endif %} la fiche</button></form>{% endif %}
+      <form method="post" action="/video/{{ v.id }}/retry"><input type="hidden" name="full" value="1"><button class="btn">Tout retraiter</button></form>
+      <form method="post" action="/video/{{ v.id }}/delete" onsubmit="return confirm('Supprimer cette vidéo ?')"><button class="btn danger">Supprimer</button></form>
+    </div>
+  </div>
+</section>
+
+<nav class="tabs">
+  <a href="#formation" class="tab on" data-t="formation">Formation</a>
+  <a href="#liens" class="tab" data-t="liens">Liens ({{ links|length }})</a>
+  <a href="#transcription" class="tab" data-t="transcription">Transcription</a>
+  <a href="#description" class="tab" data-t="description">Description</a>
+  <a href="#manuel" class="tab" data-t="manuel">Fournir une transcription</a>
+</nav>
+
+<section class="panel pane" id="p-formation">
+  {% if v.summary_md %}<article class="md">{{ v.summary_md|md }}</article>
+  {% elif v.status in ACTIVE %}<p class="empty">Traitement en cours… cette page se met à jour toute seule.</p>
+  {% elif v.transcript and not llm_ok %}<p class="empty">Transcription prête. Renseigne la clé Anthropic dans <a href="/settings">Réglages</a> puis clique « Générer la fiche ».</p>
+  {% else %}<p class="empty">Pas encore de fiche.</p>{% endif %}
+</section>
+
+<section class="panel pane" id="p-liens" hidden>
+  {% if links %}<ul class="links">{% for l in links %}<li><a href="{{ l.url }}" target="_blank" rel="noopener noreferrer">{{ l.label or l.url }}</a><small> {{ l.url }} · {{ l.source }}</small></li>{% endfor %}</ul>
+  {% else %}<p class="empty">Aucun lien trouvé dans la description. Les liens d'outils trouvés par recherche web figurent en bas de la fiche.</p>{% endif %}
+</section>
+
+<section class="panel pane" id="p-transcription" hidden>
+  {% if v.transcript %}<pre class="tx">{{ v.transcript }}</pre>{% else %}<p class="empty">Pas encore de transcription.</p>{% endif %}
+</section>
+
+<section class="panel pane" id="p-description" hidden>
+  {% if chapters %}<h3>Chapitres</h3><ul>{% for c in chapters %}<li>{{ '%02d:%02d' % (c.start // 60, c.start % 60) }} — {{ c.title }}</li>{% endfor %}</ul>{% endif %}
+  <pre class="tx">{{ v.description or '(vide)' }}</pre>
+</section>
+
+<section class="panel pane" id="p-manuel" hidden>
+  <p class="hint">Si YouTube bloque le serveur, colle la transcription ici (ou envoie un .txt / .srt / .vtt, ou un fichier audio/vidéo{% if not whisper_ok %} — Whisper indisponible{% endif %}).</p>
+  <form method="post" action="/video/{{ v.id }}/transcript" enctype="multipart/form-data">
+    <textarea name="text" rows="8" placeholder="Transcription…"></textarea>
+    <div class="row"><input type="file" name="file"><button class="btn primary">Utiliser cette transcription</button></div>
+  </form>
+</section>
+
+<script>
+(function(){
+  const tabs = document.querySelectorAll('.tab');
+  function show(t){ tabs.forEach(a => a.classList.toggle('on', a.dataset.t === t));
+    document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== 'p-' + t); }
+  tabs.forEach(a => a.addEventListener('click', e => { e.preventDefault(); history.replaceState(null,'','#'+a.dataset.t); show(a.dataset.t); }));
+  if (location.hash) { const t = location.hash.slice(1); if (document.getElementById('p-'+t)) show(t); }
+  const active = {{ 'true' if v.status in ACTIVE else 'false' }};
+  if (active) { (async function poll(){
+    try { const s = await (await fetch('/video/{{ v.id }}/status')).json();
+      if (['queued','fetching','transcribing','summarizing'].includes(s.status)) {
+        document.getElementById('vstep').textContent = s.step || ''; setTimeout(poll, 3000);
+      } else { location.reload(); } } catch(e) { setTimeout(poll, 5000); } })(); }
+})();
+</script>
+{% endblock %}

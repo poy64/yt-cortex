@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ s.name }} — Skill{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="row between">
+    <h1>Skill : {{ s.name or '…' }}</h1>
+    <span class="badge b-{{ 'summarizing' if s.status in ('queued','generating') else s.status }}">{{ {'queued':'En file','generating':'Génération…','done':'Prêt','error':'Erreur'}.get(s.status, s.status) }}</span>
+  </div>
+  <div class="meta">{{ s.description }}</div>
+  {% if request.query_params.get('ok') %}<div class="step ok">Déposé dans Dropbox : {{ s.push_path }}</div>{% endif %}
+  {% if request.query_params.get('err') or s.status == 'error' %}<div class="step err">{{ s.error }}</div>{% endif %}
+  {% if s.status == 'done' %}
+  <div class="row wrap">
+    <a class="btn primary" href="/skills/{{ s.id }}/download">Télécharger le .skill</a>
+    {% if dbx %}<form method="post" action="/skills/{{ s.id }}/push"><button class="btn primary">Envoyer dans l'AIOS (Dropbox : {{ dbx_path }}/{{ s.name }})</button></form>
+    {% else %}<a class="btn" href="/settings">Connecter Dropbox pour envoyer dans l'AIOS</a>{% endif %}
+    <form method="post" action="/skills/{{ s.id }}/delete" onsubmit="return confirm('Supprimer ce skill ?')"><button class="btn danger">Supprimer</button></form>
+  </div>
+  <p class="hint">Sources : {% for v in vids %}<a href="/video/{{ v.id }}">{{ v.title }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</section>
+{% for path, content in files.items() %}
+<section class="panel"><h3>{{ path }}</h3><pre class="tx">{{ content }}</pre></section>
+{% endfor %}
+{% if s.status in ('queued','generating') %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}
+{% endblock %}

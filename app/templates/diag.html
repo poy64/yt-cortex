@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Diagnostic</h1>
+  <table class="kv">{% for k, val in info.items() %}<tr><th>{{ k }}</th><td>{{ val }}</td></tr>{% endfor %}</table>
+</section>
+<section class="panel">
+  <h3>Tester l'accès à une vidéo (métadonnées + sous-titres)</h3>
+  <form method="get" class="row"><input class="grow" name="test" value="{{ test }}" placeholder="URL YouTube"><button class="btn primary">Tester</button></form>
+  {% if result %}<table class="kv">{% for k, val in result.items() %}<tr><th>{{ k }}</th><td>{{ val }}</td></tr>{% endfor %}</table>{% endif %}
+</section>
+{% endblock %}

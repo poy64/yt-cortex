@@ -1,0 +1,64 @@
+services:
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    init: true
+    restart: unless-stopped
+    networks: [internal]
+
+  cortex:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+        COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+        WORKDIR /srv
+        RUN pip install --no-cache-dir fastapi==0.165.0 "uvicorn[standard]==0.54.0" jinja2 python-multipart httpx markdown-it-py faster-whisper
+        ARG YTDLP_REFRESH=1
+        RUN pip install --no-cache-dir -U "yt-dlp[default]" bgutil-ytdlp-pot-provider
+        ARG APP_B64
+        ARG APP_SHA
+        RUN echo "$$APP_B64" | base64 -d > /tmp/app.tgz && echo "$$APP_SHA  /tmp/app.tgz" | sha256sum -c - && tar xz -C /srv -f /tmp/app.tgz && rm /tmp/app.tgz
+        ENV DATA_DIR=/data HF_HOME=/data/hf PYTHONUNBUFFERED=1
+        EXPOSE 8000
+        CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+      args:
+        APP_B64: ${APP_B64}
+        APP_SHA: ${APP_SHA}
+        YTDLP_REFRESH: ${YTDLP_REFRESH:-1}
+    restart: unless-stopped
+    depends_on: [bgutil]
+    mem_limit: 6g
+    cpus: 3
+    environment:
+      APP_USER: ${APP_USER}
+      APP_PASSWORD: ${APP_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BGUTIL_URL: http://bgutil:4416
+      WHISPER_THREADS: "3"
+    volumes:
+      - cortex_data:/data
+    networks: [internal, web]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 40s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.ytcortex.rule=Host(`cortex.quepasatio.cloud`)
+      - traefik.http.routers.ytcortex.entrypoints=websecure
+      - traefik.http.routers.ytcortex.tls=true
+      - traefik.http.routers.ytcortex.tls.certresolver=mytlschallenge
+      - traefik.http.services.ytcortex.loadbalancer.server.port=8000
+
+networks:
+  internal: {}
+  web:
+    external: true
+    name: n8n_default
+
+volumes:
+  cortex_data:

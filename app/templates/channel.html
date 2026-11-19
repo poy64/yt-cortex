@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ ch.name }} — YT Cortex{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="row between">
+    <h1>{{ ch.name }}</h1>
+    <div class="row">
+      <form method="post" action="/channels/{{ ch.id }}/sync"><button class="btn">Actualiser la liste</button></form>
+      <form method="post" action="/channels/{{ ch.id }}/delete" onsubmit="return confirm('Se désabonner de cette chaîne ?')"><button class="btn danger">Se désabonner</button></form>
+    </div>
+  </div>
+  <div class="meta">Vidéos des {{ days }} derniers jours · dernière synchro : {{ ch.last_sync|ts }}
+    {% if ch.sync_status == 'running' %}· <b>synchronisation en cours (quelques minutes)…</b>{% endif %}</div>
+  {% if ch.sync_error %}<div class="step err">{{ ch.sync_error }}</div>{% endif %}
+</section>
+
+<form method="post" action="/channels/{{ ch.id }}/process" class="panel">
+  <div class="row between">
+    <label class="chk"><input type="checkbox" id="all"> Tout sélectionner (non traitées)</label>
+    <button class="btn primary" type="submit">Traiter la sélection</button>
+  </div>
+  {% for v in vids %}
+  <div class="vcard">
+    <label class="chk"><input type="checkbox" name="yt_ids" value="{{ v.yt_id }}" {% if v.vid %}disabled{% endif %}></label>
+    <img class="thumb" loading="lazy" src="{{ v.thumbnail }}" alt="">
+    <div class="vinfo">
+      <a class="vtitle" href="https://www.youtube.com/watch?v={{ v.yt_id }}" target="_blank" rel="noopener noreferrer">{{ v.title }}</a>
+      <div class="meta">{{ v.published }}{% if v.duration %} · {{ v.duration|dur }}{% endif %}</div>
+    </div>
+    {% if v.vid %}<a class="badge b-{{ v.vstatus }}" href="/video/{{ v.vid }}">{{ STATUS_FR.get(v.vstatus, v.vstatus) }}</a>{% endif %}
+  </div>
+  {% else %}<p class="empty">{% if ch.sync_status == 'running' %}Liste en cours de chargement… recharge la page dans un instant.{% else %}Aucune vidéo sur la période.{% endif %}</p>{% endfor %}
+</form>
+<script>
+document.getElementById('all')?.addEventListener('change', e => document.querySelectorAll('input[name=yt_ids]:not(:disabled)').forEach(i => i.checked = e.target.checked));
+{% if ch.sync_status == 'running' %}setTimeout(() => location.reload(), 6000);{% endif %}
+</script>
+{% endblock %}

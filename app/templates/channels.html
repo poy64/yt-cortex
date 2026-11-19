@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>S'abonner à une chaîne</h1>
+  <form method="post" action="/channels/add" class="row">
+    <input class="grow" name="channel" placeholder="@handle, URL de chaîne ou identifiant UC…" required>
+    <button class="btn primary">Ajouter</button>
+  </form>
+  {% if err %}<div class="step err">{{ err }}</div>{% endif %}
+  <p class="hint">Les vidéos des 2 derniers mois sont listées ; tu choisis lesquelles traiter.</p>
+</section>
+<section class="panel">
+  <h1>Mes chaînes</h1>
+  {% for c in channels %}
+  <div class="vcard">
+    <div class="vinfo"><a class="vtitle" href="/channels/{{ c.id }}">{{ c.name }}</a>
+      <div class="meta">{{ c.n }} vidéo(s) listée(s) · dernière synchro : {{ c.last_sync|ts }}
+        {% if c.sync_status == 'running' %}· <b>synchronisation…</b>{% elif c.sync_status == 'error' %}· <b class="err">erreur</b>{% endif %}</div>
+      {% if c.sync_error %}<div class="step err">{{ c.sync_error }}</div>{% endif %}
+    </div>
+    <a class="btn" href="/channels/{{ c.id }}">Ouvrir</a>
+  </div>
+  {% else %}<p class="empty">Aucune chaîne suivie.</p>{% endfor %}
+</section>
+{% endblock %}

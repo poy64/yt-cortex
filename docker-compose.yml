@@ -1,0 +1,48 @@
+services:
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    init: true
+    restart: unless-stopped
+    networks: [internal]
+
+  cortex:
+    build:
+      context: https://github.com/poy64/yt-cortex.git#master
+      args:
+        YTDLP_REFRESH: ${YTDLP_REFRESH:-1}
+    restart: unless-stopped
+    depends_on: [bgutil]
+    mem_limit: 6g
+    cpus: 3
+    environment:
+      APP_USER: ${APP_USER}
+      APP_PASSWORD: ${APP_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BGUTIL_URL: http://bgutil:4416
+      WHISPER_THREADS: "3"
+    volumes:
+      - cortex_data:/data
+    networks: [internal, web]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 40s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.ytcortex.rule=Host(`cortex.quepasatio.cloud`)
+      - traefik.http.routers.ytcortex.entrypoints=websecure
+      - traefik.http.routers.ytcortex.tls=true
+      - traefik.http.routers.ytcortex.tls.certresolver=mytlschallenge
+      - traefik.http.services.ytcortex.loadbalancer.server.port=8000
+
+networks:
+  internal: {}
+  web:
+    external: true
+    name: n8n_default
+
+volumes:
+  cortex_data:

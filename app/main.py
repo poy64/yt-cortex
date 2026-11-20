@@ -1,6 +1,7 @@
 """YT Cortex — interface web (FastAPI)."""
 import base64
 from contextlib import asynccontextmanager
+import hashlib
 import hmac
 import json
 import os
@@ -10,7 +11,7 @@ import shutil
 import tempfile
 import time
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -73,33 +74,98 @@ def render(request, name, **ctx):
 
 
 # ------------------------------------------------------------------ sécurité
-@app.middleware("http")
-async def guard(request: Request, call_next):
-    if request.url.path == "/healthz":
-        return PlainTextResponse("ok")
-    if not APP_PASSWORD:
-        return PlainTextResponse("APP_PASSWORD non configuré : service verrouillé.", status_code=503)
-    ok = False
-    h = request.headers.get("authorization", "")
+COOKIE = "ytc_session"
+SESSION_TTL = 30 * 24 * 3600
+_SKEY = hashlib.sha256(("ytcortex|" + APP_USER + "|" + APP_PASSWORD).encode()).digest()
+_fails = {}  # ip -> (nombre d'échecs, instant du dernier échec)
+
+
+def _sign(payload):
+    return hmac.new(_SKEY, payload.encode(), hashlib.sha256).hexdigest()
+
+
+def make_session():
+    exp = str(int(time.time()) + SESSION_TTL)
+    return exp + "." + _sign(exp)
+
+
+def valid_session(tok):
+    exp, _, sig = (tok or "").partition(".")
+    return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign(exp))
+
+
+def _safe_next(n):
+    return n if n.startswith("/") and not n.startswith("//") and "\\" not in n else "/"
+
+
+def _authed(request):
+    if valid_session(request.cookies.get(COOKIE)):
+        return True
+    h = request.headers.get("authorization", "")  # accès scripts (curl -u), sans fenêtre navigateur
     if h.lower().startswith("basic "):
         try:
             u, _, p = base64.b64decode(h[6:]).decode().partition(":")
-            ok = hmac.compare_digest(u, APP_USER) and hmac.compare_digest(p, APP_PASSWORD)
+            return hmac.compare_digest(u, APP_USER) and hmac.compare_digest(p, APP_PASSWORD)
         except Exception:
-            ok = False
-    if not ok:
-        return Response("Authentification requise", status_code=401, headers={"WWW-Authenticate": 'Basic realm="YT Cortex"'})
+            return False
+    return False
+
+
+def _login_page(request, error="", nxt="/", status=200):
+    return templates.TemplateResponse(request, "login.html", {"error": error, "next": nxt}, status_code=status)
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    path = request.url.path
+    if path == "/healthz":
+        return PlainTextResponse("ok")
+    if not APP_PASSWORD:
+        return PlainTextResponse("APP_PASSWORD non configuré : service verrouillé.", status_code=503)
     if request.method not in ("GET", "HEAD", "OPTIONS"):  # anti-CSRF : l'origine doit être l'hôte lui-même
         origin = request.headers.get("origin") or request.headers.get("referer") or ""
         if origin and urlparse(origin).netloc != request.headers.get("host", ""):
             return PlainTextResponse("Origine refusée", status_code=403)
+    if path not in ("/login", "/static/style.css") and not _authed(request):
+        if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+            return RedirectResponse("/login?next=" + quote(request.url.path + ("?" + request.url.query if request.url.query else "")), status_code=303)
+        return Response("Authentification requise", status_code=401)
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["Cache-Control"] = "no-store" if path == "/login" else resp.headers.get("Cache-Control", "no-cache")
     return resp
 
 
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, next: str = "/"):
+    if _authed(request):
+        return back(_safe_next(next))
+    return _login_page(request, nxt=_safe_next(next))
+
+
+@app.post("/login")
+async def login_submit(request: Request, username: str = Form(""), password: str = Form(""), next: str = Form("/")):
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    n, last = _fails.get(ip, (0, 0))
+    if n >= 5 and time.time() - last < 300:
+        return _login_page(request, "Trop d'essais, réessaie dans quelques minutes.", _safe_next(next), 429)
+    if hmac.compare_digest(username.strip(), APP_USER) and hmac.compare_digest(password, APP_PASSWORD):
+        _fails.pop(ip, None)
+        resp = back(_safe_next(next))
+        resp.set_cookie(COOKIE, make_session(), max_age=SESSION_TTL, httponly=True, samesite="lax",
+                        secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https")
+        return resp
+    _fails[ip] = (n + 1 if time.time() - last < 300 else 1, time.time())
+    return _login_page(request, "Identifiant ou mot de passe incorrect.", _safe_next(next), 401)
+
+
+@app.post("/logout")
+async def logout():
+    resp = back("/login")
+    resp.delete_cookie(COOKIE)
+    return resp
 
 
 def back(url="/"):

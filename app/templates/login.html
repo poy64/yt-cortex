@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion · YT Cortex</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.login{max-width:340px;margin:12vh auto;padding:24px;border:1px solid var(--line,#333);border-radius:10px}
+.login h1{font-size:1.3rem;margin:0 0 16px}
+.login label{display:block;margin:12px 0 4px;font-size:.9rem}
+.login input{width:100%;box-sizing:border-box}
+.login button{margin-top:18px;width:100%}
+.login .err{color:#e5484d;margin:0 0 8px}
+</style>
+</head>
+<body>
+<form class="login" method="post" action="/login" autocomplete="on">
+  <h1>▶ YT Cortex</h1>
+  {% if error %}<p class="err" role="alert">{{ error }}</p>{% endif %}
+  <label for="username">Identifiant</label>
+  <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" required autofocus>
+  <label for="password">Mot de passe</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit">Se connecter</button>
+</form>
+</body>
+</html>

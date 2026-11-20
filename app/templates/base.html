@@ -16,6 +16,7 @@
     <a href="/settings" {% if request.url.path.startswith('/settings') %}class="on"{% endif %}>Réglages</a>
     <a href="/diag" {% if request.url.path.startswith('/diag') %}class="on"{% endif %}>Diagnostic</a>
   </nav>
+  <form method="post" action="/logout" style="margin-left:auto"><button class="btn" type="submit">Déconnexion</button></form>
 </header>
 <main>{% block content %}{% endblock %}</main>
 </body>

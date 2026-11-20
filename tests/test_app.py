@@ -64,6 +64,21 @@ def test_auth_and_csrf(client):
     r = client.post("/videos/add", data={"urls": "x"}, headers={**AUTH, "Origin": "https://evil.example"}, follow_redirects=False)
     assert r.status_code == 403
 
+def test_login_form_session(client):
+    r = client.get("/", headers={"Accept": "text/html"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/login?next=")
+    page = client.get("/login")
+    assert page.status_code == 200 and 'type="password"' in page.text and 'autocomplete="current-password"' in page.text
+    bad = client.post("/login", data={"username": "iban", "password": "no", "next": "/"})
+    assert bad.status_code == 401 and "incorrect" in bad.text
+    c2 = TestClient(main.app)
+    ok = c2.post("/login", data={"username": "iban", "password": "pw", "next": "//evil.example"}, follow_redirects=False)
+    assert ok.status_code == 303 and ok.headers["location"] == "/" and "ytc_session" in ok.headers["set-cookie"]
+    assert "httponly" in ok.headers["set-cookie"].lower()
+    assert c2.get("/").status_code == 200
+    assert c2.post("/logout", follow_redirects=False).status_code == 303
+    assert c2.get("/").status_code == 401 or c2.get("/", headers={"Accept": "text/html"}, follow_redirects=False).status_code == 303
+
 def test_full_pipeline(client, monkeypatch):
     monkeypatch.setattr(youtube, "fetch_metadata", lambda url: {"id": "dQw4w9WgXcQ", "title": "Test n8n", "channel": "Chan", "channel_id": "UCx", "upload_date": "20261101", "duration": 600,
         "description": "Site : https://n8n.io\nChapitres", "chapters": [{"start_time": 0, "title": "Intro"}]})

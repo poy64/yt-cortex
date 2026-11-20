@@ -281,7 +281,7 @@ async def video_transcript(vid: int, text: str = Form(""), file: UploadFile = Fi
     if not content:
         return PlainTextResponse("Aucune transcription exploitable dans ce texte/fichier.", status_code=400)
     if content:
-        db.update_video(vid, transcript=content, source="manual",
+        db.update_video(vid, transcript=content, transcript_clean="", source="manual",
                         links_json=json.dumps(youtube.extract_links(v["description"], content), ensure_ascii=False),
                         status="transcribed", error="", step="Transcription fournie")
         worker.enqueue("summarize", vid)

@@ -56,6 +56,18 @@ def _call(system: str, user: str, max_tokens=8000, tools=None, retries=4) -> str
 
 
 # ------------------------------------------------------------------ résumé « formation »
+CREATOR_RULE = """
+CONTENU À EXCLURE — tout ce qui concerne le CRÉATEUR de la vidéo et non le sujet traité :
+- présentation de lui-même, de sa chaîne, de son parcours, de son entreprise, de ses résultats personnels mis en avant comme preuve sociale ;
+- demandes de like, d'abonnement, de commentaire, de partage, de cloche, de suivi sur les réseaux ou la newsletter ;
+- renvois à ses autres vidéos, séries, playlists, lives ou épisodes (« dans ma vidéo précédente… », « je ferai une vidéo sur… ») ;
+- promotion de SES formations, communautés, coachings, templates ou produits payants, codes promo, liens affiliés, sponsors et partenariats ;
+- anecdotes personnelles, plaisanteries, remerciements, annonces et teasing sans valeur technique.
+Ne conserve que la SUBSTANCE : concepts, méthodes, étapes, chiffres, paramètres, prompts, commandes, outils tiers et exemples utiles. \
+Si une idée n'est expliquée que par un renvoi à un autre contenu du créateur, supprime le renvoi et garde seulement ce qui est réellement expliqué. \
+Rédige à la forme impersonnelle ou à l'impératif : jamais « l'auteur », « le créateur », « il dit », « dans cette vidéo » ni « je ».
+"""
+
 SUMMARY_SYSTEM = """Tu es un ingénieur pédagogique. Tu transformes la transcription d'une vidéo YouTube en FICHE DE FORMATION \
 exploitable sans revoir la vidéo, rédigée en {lang}.
 
@@ -63,7 +75,8 @@ Règles strictes :
 - Fidélité : n'invente AUCUN fait, chiffre, outil ou URL. Si la transcription est ambiguë, dis-le.
 - Les liens : n'utilise que des URL présentes dans la liste « LIENS CANDIDATS » fournie. Insère-les en Markdown [nom](url) là où \
   l'outil/la ressource est évoqué(e). Pour un outil cité sans URL fournie, écris son nom et ajoute « (lien non fourni dans la vidéo) ».
-- Supprime les passages sans valeur : intro, demandes de like/abonnement, sponsors, digressions.
+- Applique strictement la règle « CONTENU À EXCLURE » ci-dessous.
+- Les liens candidats viennent aussi de la description : ignore ceux qui mènent aux produits, réseaux, communautés ou affiliations du créateur ; ne garde que les outils et ressources tiers utiles au sujet.
 - Garde les chiffres, noms d'outils, paramètres, prompts et commandes EXACTS (en blocs de code si besoin).
 - Appuie-toi sur les horodatages [mm:ss] de la transcription pour indiquer où trouver chaque module dans la vidéo.
 
@@ -86,6 +99,30 @@ Pour chaque module : explications structurées, exemples, chiffres clés, puis u
 PARTIAL_SYSTEM = """Tu résumes un EXTRAIT d'une transcription vidéo en notes détaillées en {lang} (garde horodatages [mm:ss], \
 chiffres, noms d'outils, commandes, prompts exacts ; n'invente rien). Sortie : notes Markdown denses, pas d'introduction."""
 
+CLEAN_SYSTEM = """Tu nettoies un EXTRAIT de transcription de vidéo YouTube. Sortie : le texte nettoyé UNIQUEMENT, dans la langue d'origine, \
+en conservant les horodatages [mm:ss] des passages gardés.
+Fais ceci : retire les tics de langage et répétitions, corrige la ponctuation évidente, regroupe en paragraphes. \
+Ne reformule pas le fond, n'ajoute rien, ne traduis pas, n'invente aucun fait, chiffre ou nom d'outil.
+""" + CREATOR_RULE + """Si tout l'extrait est à exclure, réponds par une ligne vide."""
+
+CLEAN_CHUNK = 40_000
+
+
+def clean_transcript(v) -> str:
+    """Transcription débarrassée du contenu propre au créateur (promo, suivi, renvois), par blocs."""
+    text = v["transcript"] or ""
+    parts, cur = [], ""
+    for line in text.splitlines(keepends=True):
+        if len(cur) + len(line) > CLEAN_CHUNK and cur:
+            parts.append(cur)
+            cur = ""
+        cur += line
+    if cur:
+        parts.append(cur)
+    head = f"VIDÉO : {v['title']} (chaîne : {v['channel']})\n"
+    out = [_call(CLEAN_SYSTEM, f"{head}EXTRAIT {i+1}/{len(parts)} :\n{p}", max_tokens=16000) for i, p in enumerate(parts)]
+    return "\n\n".join(o.strip() for o in out if o.strip())
+
 CHUNK = 140_000
 
 
@@ -103,8 +140,8 @@ def _links_block(v) -> str:
 
 def summarize(v) -> str:
     lang = db.get_setting("output_language", "français") or "français"
-    sysmsg = SUMMARY_SYSTEM.format(lang=lang)
-    transcript = v["transcript"]
+    sysmsg = SUMMARY_SYSTEM.format(lang=lang) + "\n" + CREATOR_RULE
+    transcript = (v["transcript_clean"] or v["transcript"])
     if len(transcript) > CHUNK * 2:  # très longue vidéo : map-reduce
         parts = [transcript[i:i + CHUNK] for i in range(0, len(transcript), CHUNK)]
         notes = [_call(PARTIAL_SYSTEM.format(lang=lang), f"EXTRAIT {i+1}/{len(parts)} :\n{p}", max_tokens=6000)
@@ -126,7 +163,7 @@ def resolve_tool_links(summary_md: str, known_urls) -> list:
     system = ("Tu reçois une fiche de formation. Liste les outils/logiciels/services/sites CITÉS dont l'URL n'apparaît pas "
               "déjà dans la liste des liens connus (max 10). Pour chacun, trouve par recherche web son site OFFICIEL. "
               "Réponds UNIQUEMENT par un tableau JSON : [{\"name\":\"...\",\"url\":\"https://...\"}]. "
-              "Si tu n'es pas certain de l'URL officielle, omets l'élément. Aucun texte hors JSON.")
+              "Exclus les produits, formations, communautés et services du créateur de la vidéo. Si tu n'es pas certain de l'URL officielle, omets l'élément. Aucun texte hors JSON.")
     user = "LIENS CONNUS :\n" + "\n".join(known_urls) + "\n\nFICHE :\n" + summary_md[:30000]
     try:
         out = _call(system, user, max_tokens=2000, tools=tools)
@@ -159,7 +196,9 @@ Corps (français, ≤ 250 lignes) :
 ## Pièges à éviter
 ## Références (liste des fichiers references/*.md fournis et ce que chacun contient)
 Règles : n'invente rien, reste fidèle aux fiches ; synthétise (pas de copier-coller massif : le détail est dans references/) ; \
-écris à l'impératif, pour un agent qui exécute une tâche."""
+écris à l'impératif, pour un agent qui exécute une tâche.
+Le skill ne doit contenir AUCUNE trace du créateur des vidéos : ni son nom, ni sa chaîne, ni ses autres vidéos, formations, offres ou demandes de suivi. \
+Seule la substance (méthodes, règles, procédures, outils tiers) est conservée."""
 
 
 def make_skill_md(name_hint: str, videos, ref_names) -> str:

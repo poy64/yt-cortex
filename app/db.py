@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS videos (
   source TEXT DEFAULT '',            -- subs|whisper|manual
   lang TEXT DEFAULT '',
   transcript TEXT DEFAULT '',
+  transcript_clean TEXT DEFAULT '',  -- transcription nettoyée (sans promo/suivi/renvois du créateur)
   summary_md TEXT DEFAULT '',
   links_json TEXT DEFAULT '[]',
   error TEXT DEFAULT '',
@@ -88,6 +89,9 @@ def conn() -> sqlite3.Connection:
 def init():
     c = conn()
     c.executescript(SCHEMA)
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(videos)")}
+    if "transcript_clean" not in cols:  # migration d'une base existante
+        c.execute("ALTER TABLE videos ADD COLUMN transcript_clean TEXT DEFAULT ''")
     c.commit()
 
 

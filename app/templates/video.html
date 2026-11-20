@@ -45,7 +45,12 @@
 </section>
 
 <section class="panel pane" id="p-transcription" hidden>
-  {% if v.transcript %}<pre class="tx">{{ v.transcript }}</pre>{% else %}<p class="empty">Pas encore de transcription.</p>{% endif %}
+  {% if v.transcript_clean %}
+    <p class="hint">Transcription nettoyée : sans promotion, demandes de suivi ni renvois du créateur. Elle alimente la fiche et les skills.</p>
+    <pre class="tx">{{ v.transcript_clean }}</pre>
+    <details><summary>Transcription brute</summary><pre class="tx">{{ v.transcript }}</pre></details>
+  {% elif v.transcript %}<p class="hint">Transcription brute (le nettoyage se fait en même temps que la fiche).</p><pre class="tx">{{ v.transcript }}</pre>
+  {% else %}<p class="empty">Pas encore de transcription.</p>{% endif %}
 </section>
 
 <section class="panel pane" id="p-description" hidden>

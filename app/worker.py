@@ -28,7 +28,7 @@ def process_upload(vid: int, path: str, tmp: str):
         v = db.one("SELECT * FROM videos WHERE id=?", (vid,))
         _set(vid, status="transcribing", step="Transcription Whisper du fichier…")
         text, lang = transcribe.transcribe_file(path)
-        _set(vid, transcript=text, lang=lang, source="whisper",
+        _set(vid, transcript=text, transcript_clean="", lang=lang, source="whisper",
              links_json=json.dumps(youtube.extract_links(v["description"], text), ensure_ascii=False), status="transcribed")
         summarize_video(vid)
     except Exception as e:  # noqa: BLE001
@@ -94,7 +94,7 @@ def process_video(vid: int, force_transcript=False):
                 sub_err = str(e)
             if got:
                 text, lang, kind = got
-                _set(vid, transcript=text, lang=lang, source=f"subs-{kind}")
+                _set(vid, transcript=text, transcript_clean="", lang=lang, source=f"subs-{kind}")
             else:
                 if not transcribe.available():
                     raise youtube.YTError(sub_err or "Pas de sous-titres et Whisper indisponible.")
@@ -108,7 +108,7 @@ def process_video(vid: int, force_transcript=False):
                     text, lang = transcribe.transcribe_file(audio)
                 finally:
                     shutil.rmtree(tmp, ignore_errors=True)
-                _set(vid, transcript=text, lang=lang, source="whisper")
+                _set(vid, transcript=text, transcript_clean="", lang=lang, source="whisper")
             v = db.one("SELECT * FROM videos WHERE id=?", (vid,))
         links = youtube.extract_links(v["description"], v["transcript"])
         _set(vid, links_json=json.dumps(links, ensure_ascii=False),
@@ -131,13 +131,14 @@ def summarize_video(vid: int):
         return
     try:
         _set(vid, status="summarizing", step="Rédaction de la formation…", error="")
+        if not v["transcript_clean"]:
+            _set(vid, step="Nettoyage de la transcription…")
+            _set(vid, transcript_clean=llm.clean_transcript(v))
+            v = db.one("SELECT * FROM videos WHERE id=?", (vid,))
+        _set(vid, step="Rédaction de la formation…")
         md = llm.summarize(v)
         links = db.jloads(v["links_json"], [])
         extra = []
-        if links:
-            extra.append("## Liens de la description YouTube\n" + "\n".join(
-                f"- [{l['label'] or l['url']}]({l['url']})" if l.get("label") else f"- <{l['url']}>"
-                for l in links if l["source"] == "description"))
         _set(vid, step="Recherche des liens officiels des outils…")
         resolved = llm.resolve_tool_links(md, [l["url"] for l in links])
         if resolved:

@@ -84,6 +84,7 @@ def test_full_pipeline(client, monkeypatch):
         "description": "Site : https://n8n.io\nChapitres", "chapters": [{"start_time": 0, "title": "Intro"}]})
     monkeypatch.setattr(youtube, "fetch_subtitles", lambda yid, langs=("fr", "en"): ("[00:01] bonjour", "fr", "auto"))
     monkeypatch.setattr(llm, "api_key", lambda: "k")
+    monkeypatch.setattr(llm, "clean_transcript", lambda v: "[00:01] contenu utile")
     monkeypatch.setattr(llm, "summarize", lambda v: "# Fiche\n\nVoir [n8n](https://n8n.io) <script>alert(1)</script>")
     monkeypatch.setattr(llm, "resolve_tool_links", lambda md, urls: [{"name": "Zapier", "url": "https://zapier.com"}])
     worker.start = lambda: None
@@ -94,7 +95,8 @@ def test_full_pipeline(client, monkeypatch):
     v = db.one("SELECT * FROM videos WHERE id=?", (ids[0],))
     assert v["status"] == "done", v["error"]
     assert v["published"] == "2026-11-01" and v["source"] == "subs-auto"
-    assert "Liens de la description" in v["summary_md"] and "zapier.com" in v["summary_md"]
+    assert "zapier.com" in v["summary_md"] and v["transcript_clean"] == "[00:01] contenu utile"
+    assert "S'abonner" not in v["summary_md"]
     page = client.get(f"/video/{ids[0]}", headers=AUTH)
     assert page.status_code == 200 and "<script>alert" not in page.text and "&lt;script&gt;" in page.text
     assert 'target="_blank"' in page.text

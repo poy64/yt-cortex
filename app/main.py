@@ -288,6 +288,27 @@ async def video_transcript(vid: int, text: str = Form(""), file: UploadFile = Fi
     return back(f"/video/{vid}")
 
 
+# ------------------------------------------------------------------ export NotebookLM
+@app.post("/export/notebooklm")
+def export_notebooklm(video_ids: list[int] = Form([]), with_transcript: str = Form("")):
+    vids = [db.one("SELECT * FROM videos WHERE id=? AND summary_md!=''", (i,)) for i in video_ids]
+    vids = [v for v in vids if v]
+    if not vids:
+        return PlainTextResponse("Sélectionne au moins une vidéo déjà résumée (statut « Terminé »).", status_code=400)
+    return Response(skills.notebooklm_zip(vids, bool(with_transcript)), media_type="application/zip",
+                    headers={"Content-Disposition": 'attachment; filename="notebooklm-export.zip"'})
+
+
+@app.get("/video/{vid}/notebooklm.md")
+def video_notebooklm(vid: int, transcript: int = 0):
+    v = db.one("SELECT * FROM videos WHERE id=?", (vid,))
+    if not v or not v["summary_md"]:
+        return PlainTextResponse("Fiche pas prête", status_code=404)
+    name = skills.slugify(v["title"] or v["yt_id"], 80)
+    return Response(skills.notebooklm_md(v, bool(transcript)), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.md"'})
+
+
 # ------------------------------------------------------------------ skills
 @app.post("/skills/create")
 def skills_create(video_ids: list[int] = Form([]), name: str = Form("")):

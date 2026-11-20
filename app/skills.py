@@ -133,3 +133,33 @@ def push_to_dropbox(skill_id: int) -> str:
     where = f"{base}/{s['name']}"
     db.run("UPDATE skills SET pushed_at=?, push_path=? WHERE id=?", (time.time(), where, skill_id))
     return where
+
+
+# ------------------------------------------------------------------ export NotebookLM
+def notebooklm_md(v, with_transcript=False) -> str:
+    """Un fichier Markdown autonome par vidéo : en-tête visible (titre, chaîne, URL) + fiche (+ transcription nettoyée)."""
+    head = [f"# {v['title'] or v['url']}", "",
+            f"- Chaîne : {v['channel'] or '—'}", f"- Vidéo : {v['url']}"]
+    if v["published"]:
+        head.append(f"- Publiée le : {v['published']}")
+    body = (v["summary_md"] or "").strip()
+    if body.startswith("# "):  # le titre de la fiche remplace celui de l'en-tête : pas de doublon
+        body = body.split("\n", 1)[1].strip() if "\n" in body else ""
+    out = "\n".join(head) + "\n\n" + body + "\n"
+    if with_transcript and (v["transcript_clean"] or v["transcript"]):
+        out += "\n\n## Transcription nettoyée\n\n" + (v["transcript_clean"] or v["transcript"]).strip() + "\n"
+    return out
+
+
+def notebooklm_zip(videos, with_transcript=False) -> bytes:
+    buf = io.BytesIO()
+    used = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for v in videos:
+            base = slugify(v["title"] or v["yt_id"], 80)
+            nm, k = f"{base}.md", 2
+            while nm in used:
+                nm, k = f"{base}-{k}.md", k + 1
+            used.add(nm)
+            z.writestr(nm, notebooklm_md(v, with_transcript))
+    return buf.getvalue()

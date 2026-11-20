@@ -29,6 +29,7 @@ voici l'outil &amp; ses limites
 @pytest.fixture(scope="module")
 def client():
     db.init()
+    worker.start = lambda: None  # pas de thread worker réel : les tests pilotent le traitement eux-mêmes
     with TestClient(main.app) as c:
         yield c
 
@@ -100,6 +101,15 @@ def test_full_pipeline(client, monkeypatch):
     page = client.get(f"/video/{ids[0]}", headers=AUTH)
     assert page.status_code == 200 and "<script>alert" not in page.text and "&lt;script&gt;" in page.text
     assert 'target="_blank"' in page.text
+    r = client.get(f"/video/{ids[0]}/notebooklm.md", headers=AUTH)
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"] and "Vidéo : https://" in r.text and "# Fiche" not in r.text.split("\n", 1)[1][:5]
+    z = client.post("/export/notebooklm", data={"video_ids": [ids[0]], "with_transcript": "1"}, headers=AUTH)
+    assert z.status_code == 200 and z.content[:2] == b"PK"
+    import io as _io, zipfile as _zf
+    names = _zf.ZipFile(_io.BytesIO(z.content)).namelist()
+    assert len(names) == 1 and names[0].endswith(".md")
+    assert "Transcription nettoyée" in _zf.ZipFile(_io.BytesIO(z.content)).read(names[0]).decode()
+    assert client.post("/export/notebooklm", data={}, headers=AUTH).status_code == 400
     assert client.get("/", headers=AUTH).text.count("vcard") >= 1
     assert client.get("/partials/videos", headers=AUTH).status_code == 200
 

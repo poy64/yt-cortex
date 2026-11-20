@@ -21,6 +21,8 @@
     <span id="selcount">0 sélectionnée(s)</span>
     <input name="name" placeholder="Nom du skill (optionnel)">
     <button class="btn primary" type="submit" id="mkskill" disabled>Transformer en skill</button>
+    <button class="btn" type="submit" id="mknb" formaction="/export/notebooklm" disabled title="Un fichier .md par vidéo, dans un zip, à importer dans NotebookLM">Exporter pour NotebookLM</button>
+    <label class="hint"><input type="checkbox" name="with_transcript" value="1"> avec la transcription</label>
   </form>
 </section>
 
@@ -28,7 +30,7 @@
 (function(){
   const list = document.getElementById('list');
   const btn = document.getElementById('mkskill'), cnt = document.getElementById('selcount');
-  function upd(){ const n = list.querySelectorAll('input[name=video_ids]:checked').length; cnt.textContent = n + ' sélectionnée(s)'; btn.disabled = n === 0; }
+  function upd(){ const n = list.querySelectorAll('input[name=video_ids]:checked').length; cnt.textContent = n + ' sélectionnée(s)'; btn.disabled = n === 0; document.getElementById('mknb').disabled = n === 0; }
   list.addEventListener('change', upd);
   async function poll(){
     try {

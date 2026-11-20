@@ -16,6 +16,7 @@
     <div class="row wrap">
       {% if v.status == 'done' %}
       <form method="post" action="/skills/create"><input type="hidden" name="video_ids" value="{{ v.id }}"><button class="btn primary">Transformer en skill</button></form>
+      <a class="btn" href="/video/{{ v.id }}/notebooklm.md" title="Fichier Markdown à importer comme source dans NotebookLM">Exporter pour NotebookLM (.md)</a>
       {% endif %}
       {% if v.transcript and llm_ok %}<form method="post" action="/video/{{ v.id }}/summarize"><button class="btn">{% if v.summary_md %}Régénérer{% else %}Générer{% endif %} la fiche</button></form>{% endif %}
       <form method="post" action="/video/{{ v.id }}/retry"><input type="hidden" name="full" value="1"><button class="btn">Tout retraiter</button></form>
